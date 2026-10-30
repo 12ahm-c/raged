@@ -38,7 +38,7 @@
 - **Build Command:** `npm run build`
 - **Output Directory:** `dist`
 
-ملف `raghad-app/vercel.json` يحدد إعدادات البناء ومجلد التصدير. أضف متغير البيئة التالي إلى بيئة **Production** في Vercel:
+يُصدّر Expo التطبيق كصفحة SPA واحدة، ويحتوي `raghad-app/vercel.json` على إعدادات البناء وإعادة توجيه المسارات إلى التطبيق لدعم الروابط المباشرة. أضف متغير البيئة التالي إلى بيئة **Production** في Vercel:
 
 | المتغير | القيمة |
 |---|---|
