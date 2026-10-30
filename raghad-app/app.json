@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "رغد",
+    "slug": "raghad-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "supportsRTL": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "رغد",
+      "shortName": "رغد",
+      "description": "نظام إدارة الحياة — رغد",
+      "lang": "ar",
+      "dir": "rtl",
+      "backgroundColor": "#E6F4FE",
+      "themeColor": "#2563EB",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "scope": "/",
+      "output": "static"
+    },
+    "plugins": []
+  }
+}
