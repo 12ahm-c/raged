@@ -18,3 +18,41 @@ export const config = {
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? '',
   vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:admin@example.com',
 };
+
+if (config.nodeEnv === 'production') {
+  const requiredProductionSettings = [
+    ['MONGODB_URI', config.mongodbUri],
+    ['JWT_SECRET', config.jwtSecret],
+    ['JWT_REFRESH_SECRET', config.jwtRefreshSecret],
+    ['FRONTEND_URL', config.frontendUrl],
+  ] as const;
+
+  const missingSettings = requiredProductionSettings
+    .filter(([, value]) => !value || value.startsWith('dev-'))
+    .map(([name]) => name);
+
+  if (missingSettings.length > 0) {
+    throw new Error(
+      `Missing or unsafe production environment variables: ${missingSettings.join(', ')}`
+    );
+  }
+
+  if (config.jwtSecret.length < 32 || config.jwtRefreshSecret.length < 32) {
+    throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be at least 32 characters long');
+  }
+
+  if (config.jwtSecret === config.jwtRefreshSecret) {
+    throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be different values');
+  }
+
+  let frontendUrl: URL;
+  try {
+    frontendUrl = new URL(config.frontendUrl);
+  } catch {
+    throw new Error('FRONTEND_URL must be a valid HTTPS origin');
+  }
+
+  if (frontendUrl.protocol !== 'https:' || frontendUrl.origin !== config.frontendUrl) {
+    throw new Error('FRONTEND_URL must be an HTTPS origin without a path or trailing slash');
+  }
+}
