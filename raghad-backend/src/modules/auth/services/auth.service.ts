@@ -63,7 +63,7 @@ function buildTokens(user: IUser, refreshJti: string): AuthTokens {
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
     accessTokenExpiresAt: calculateExpiry('15m').toISOString(),
-    refreshTokenExpiresAt: calculateExpiry('7d').toISOString(),
+    refreshTokenExpiresAt: calculateExpiry('365d').toISOString(),
   };
 }
 

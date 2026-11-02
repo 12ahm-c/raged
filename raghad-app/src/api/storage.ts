@@ -5,9 +5,30 @@ const REFRESH_TOKEN_KEY = 'raghad_refresh_token';
 const LEGACY_ACCESS_TOKEN_KEY = 'raghad_access_token';
 let webRefreshToken: string | null = null;
 
+function isWeb(): boolean {
+  return Platform.OS === 'web';
+}
+
+function readWebToken(): string | null {
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (stored) return stored;
+    } catch {
+      // ignore storage access errors
+    }
+  }
+  return webRefreshToken;
+}
+
 export const tokenStorage = {
   async getRefreshToken(): Promise<string | null> {
-    if (Platform.OS === 'web') {
+    if (isWeb()) {
+      const stored = readWebToken();
+      if (stored) {
+        webRefreshToken = stored;
+        return stored;
+      }
       return webRefreshToken;
     }
 
@@ -15,8 +36,15 @@ export const tokenStorage = {
   },
 
   async setRefreshToken(token: string): Promise<void> {
-    if (Platform.OS === 'web') {
-      webRefreshToken = token;
+    webRefreshToken = token;
+    if (isWeb()) {
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(REFRESH_TOKEN_KEY, token);
+        } catch {
+          // ignore storage access errors
+        }
+      }
       return;
     }
 
@@ -25,21 +53,30 @@ export const tokenStorage = {
 
   async clear(): Promise<void> {
     webRefreshToken = null;
-    if (Platform.OS !== 'web') {
-      await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-      await SecureStore.deleteItemAsync(LEGACY_ACCESS_TOKEN_KEY);
+    if (isWeb()) {
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.removeItem(REFRESH_TOKEN_KEY);
+          localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+        } catch {
+          // ignore storage access errors
+        }
+      }
       return;
     }
 
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
-    }
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(LEGACY_ACCESS_TOKEN_KEY);
   },
 
   async removeLegacyAccessToken(): Promise<void> {
-    if (Platform.OS === 'web') {
+    if (isWeb()) {
       if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+        try {
+          localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+        } catch {
+          // ignore storage access errors
+        }
       }
       return;
     }

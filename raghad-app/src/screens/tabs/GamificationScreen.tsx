@@ -44,6 +44,10 @@ export function GamificationScreen() {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [filterKind, setFilterKind] = useState<'all' | 'earned' | 'lost'>('all');
 
+  // Month/year filter for points progress chart
+  const [chartMonth, setChartMonth] = useState(new Date().getMonth());
+  const [chartYear, setChartYear] = useState(new Date().getFullYear());
+
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
     else setLoading(true);
@@ -118,6 +122,31 @@ export function GamificationScreen() {
     if (filterKind === 'lost') return entry.amount < 0;
     return true;
   });
+
+  const monthNames = [
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+  ];
+
+  const chartPeriodEntries = (points?.entries ?? []).filter((entry) => {
+    const d = new Date(entry.date);
+    return !Number.isNaN(d.getTime()) && d.getMonth() === chartMonth && d.getFullYear() === chartYear;
+  });
+
+  const dayNetMap = new Map<number, number>();
+  for (const entry of chartPeriodEntries) {
+    const day = new Date(entry.date).getDate();
+    dayNetMap.set(day, (dayNetMap.get(day) ?? 0) + Number(entry.amount || 0));
+  }
+  const chartDays = Array.from(dayNetMap.keys()).sort((a, b) => a - b);
+  const chartBars = chartDays.reduce<{ day: number; net: number; cum: number }[]>((acc, day) => {
+    const net = dayNetMap.get(day) ?? 0;
+    const prevCum = acc.length > 0 ? acc[acc.length - 1].cum : 0;
+    acc.push({ day, net, cum: prevCum + net });
+    return acc;
+  }, []);
+  const periodNet = chartPeriodEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const maxAbsNet = Math.max(1, ...chartBars.map((b) => Math.abs(b.net)));
 
   return (
     <View style={commonStyles.screen}>
@@ -325,6 +354,98 @@ export function GamificationScreen() {
               ]}
             />
           </View>
+        </View>
+
+        {/* Points progress chart with month/year filter */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="trending-up" size={19} color={palette.primary} />
+            <Text style={styles.sectionTitle}>تقدم النقاط (شهر / سنة)</Text>
+          </View>
+
+          {/* Month / Year filters */}
+          <View style={styles.chartFilterRow}>
+            <View style={styles.chartFilterGroup}>
+              <Text style={styles.chartFilterLabel}>الشهر</Text>
+              <View style={styles.chartStepper}>
+                <Pressable
+                  onPress={() => setChartMonth((m) => (m + 1) % 12)}
+                  style={styles.stepperBtn}
+                >
+                  <Ionicons name="chevron-forward" size={16} color={palette.primary} />
+                </Pressable>
+                <Text style={styles.stepperValue}>{monthNames[chartMonth]}</Text>
+                <Pressable
+                  onPress={() => setChartMonth((m) => (m === 0 ? 11 : m - 1))}
+                  style={styles.stepperBtn}
+                >
+                  <Ionicons name="chevron-back" size={16} color={palette.primary} />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.chartFilterGroup}>
+              <Text style={styles.chartFilterLabel}>السنة</Text>
+              <View style={styles.chartStepper}>
+                <Pressable
+                  onPress={() => setChartYear((y) => y + 1)}
+                  style={styles.stepperBtn}
+                >
+                  <Ionicons name="chevron-forward" size={16} color={palette.primary} />
+                </Pressable>
+                <Text style={styles.stepperValue}>{chartYear}</Text>
+                <Pressable
+                  onPress={() => setChartYear((y) => y - 1)}
+                  style={styles.stepperBtn}
+                >
+                  <Ionicons name="chevron-back" size={16} color={palette.primary} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          {/* Indicator: up/down based on points */}
+          <View style={styles.chartIndicatorRow}>
+            <Ionicons
+              name={periodNet >= 0 ? 'arrow-up-circle' : 'arrow-down-circle'}
+              size={22}
+              color={periodNet >= 0 ? '#059669' : '#DC2626'}
+            />
+            <Text
+              style={[
+                styles.chartIndicatorText,
+                { color: periodNet >= 0 ? '#059669' : '#DC2626' },
+              ]}
+            >
+              {periodNet >= 0 ? 'تقدم صعوداً' : 'تقدم نزولاً'}: {periodNet >= 0 ? '+' : ''}
+              {periodNet} نقطة
+            </Text>
+          </View>
+
+          {/* Bar chart */}
+          {chartBars.length === 0 ? (
+            <Text style={styles.emptyText}>لا توجد حركات نقاط في هذا الشهر.</Text>
+          ) : (
+            <View style={styles.chartArea}>
+              {chartBars.map((bar) => {
+                const heightPct = Math.max(8, Math.round((Math.abs(bar.net) / maxAbsNet) * 100));
+                return (
+                  <View key={bar.day} style={styles.chartBarColumn}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        {
+                          height: heightPct,
+                          backgroundColor: bar.net >= 0 ? '#10B981' : '#EF4444',
+                        },
+                      ]}
+                    />
+                    <Text style={styles.chartBarLabel}>{bar.day}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Action Button: عرض سجل النقاط المفصل */}
@@ -847,5 +968,82 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: palette.muted,
+  },
+  chartFilterRow: {
+    flexDirection: 'row-reverse',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  chartFilterGroup: {
+    flex: 1,
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  chartFilterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: palette.text,
+  },
+  chartStepper: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  stepperBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+  },
+  stepperValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: palette.text,
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  chartIndicatorRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  chartIndicatorText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  chartArea: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-end',
+    gap: 4,
+    height: 120,
+    paddingTop: 8,
+  },
+  chartBarColumn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  chartBar: {
+    width: '80%',
+    borderRadius: 4,
+    minHeight: 4,
+  },
+  chartBarLabel: {
+    fontSize: 9,
+    color: palette.muted,
+    fontWeight: '600',
   },
 });

@@ -16,7 +16,7 @@ export function generateAccessToken(payload: Omit<TokenPayload, 'type'>): string
 
 export function generateRefreshToken(payload: Omit<TokenPayload, 'type'>): string {
   return jwt.sign({ ...payload, type: 'refresh' }, config.jwtRefreshSecret, {
-    expiresIn: '7d',
+    expiresIn: '365d',
   });
 }
 

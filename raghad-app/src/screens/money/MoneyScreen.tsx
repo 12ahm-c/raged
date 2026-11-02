@@ -36,6 +36,13 @@ export interface MoneySummary {
   byMonth: { month: string; total: number }[];
 }
 
+export interface ExpenseEntry {
+  id: string;
+  amount: number;
+  reason: string;
+  date: string;
+}
+
 function getTodayString(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -98,6 +105,14 @@ export function MoneyScreen() {
 
   // Create Modal state
   const [createModalVisible, setCreateModalVisible] = useState(false);
+
+  // Expenses state
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
+  const [expenseModalVisible, setExpenseModalVisible] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseReason, setExpenseReason] = useState('');
+  const [expenseDate, setExpenseDate] = useState(getTodayString());
+  const [expenseError, setExpenseError] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [newAmount, setNewAmount] = useState('');
@@ -238,6 +253,35 @@ export function MoneyScreen() {
     }
   }
 
+  function openExpenseModal() {
+    setExpenseAmount('');
+    setExpenseReason('');
+    setExpenseDate(getTodayString());
+    setExpenseError('');
+    setExpenseModalVisible(true);
+  }
+
+  function handleAddExpense() {
+    const amountNum = parseFloat(expenseAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setExpenseError('المبلغ يجب أن يكون رقماً أكبر من صفر.');
+      return;
+    }
+    if (!expenseReason.trim()) {
+      setExpenseError('يرجى تحديد سبب الانفاق.');
+      return;
+    }
+    const entry: ExpenseEntry = {
+      id: `${Date.now()}`,
+      amount: amountNum,
+      reason: expenseReason.trim(),
+      date: expenseDate.trim() || getTodayString(),
+    };
+    setExpenses((prev) => [entry, ...prev]);
+    setExpenseModalVisible(false);
+    showToast('تمت إضافة الانفاق بنجاح.');
+  }
+
   const sourcesList = summary?.bySource ?? [];
   const displayedSources = showAllSources ? sourcesList : sourcesList.slice(0, 3);
 
@@ -259,6 +303,16 @@ export function MoneyScreen() {
           </View>
 
           <View style={styles.headerActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="الانفاقات"
+              onPress={openExpenseModal}
+              style={({ pressed }) => [styles.expenseBtn, pressed && styles.btnPressed]}
+            >
+              <Ionicons name="remove-circle-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.expenseBtnText}>الانفاقات</Text>
+            </Pressable>
+
             <Pressable
               accessibilityRole="button"
               onPress={openCreateModal}
@@ -636,6 +690,98 @@ export function MoneyScreen() {
                 disabled={creating}
                 onPress={() => void handleCreateEntry()}
               />
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Expenses Modal */}
+      <Modal
+        visible={expenseModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setExpenseModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={styles.dialogScroll}>
+            <View style={styles.dialog}>
+              <View style={styles.dialogHeader}>
+                <Text style={styles.dialogTitle}>الانفاقات — ما انفقت من المال</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setExpenseModalVisible(false)}
+                  style={styles.closeBtn}
+                >
+                  <Ionicons name="close" size={20} color={palette.text} />
+                </Pressable>
+              </View>
+
+              {/* Total spent */}
+              <View style={styles.expenseTotalBox}>
+                <Text style={styles.expenseTotalLabel}>إجمالي الانفاقات</Text>
+                <Text style={styles.expenseTotalValue}>
+                  {formatAmount(expenses.reduce((s, e) => s + e.amount, 0))} أوقية
+                </Text>
+              </View>
+
+              {/* Add expense form */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>المبلغ (أوقية) *</Text>
+                <TextInput
+                  style={commonStyles.input}
+                  keyboardType="numeric"
+                  placeholder="مثال: 200"
+                  placeholderTextColor={palette.muted}
+                  value={expenseAmount}
+                  onChangeText={setExpenseAmount}
+                />
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>سبب الانفاق *</Text>
+                <TextInput
+                  style={commonStyles.input}
+                  placeholder="مثال: طعام، مواصلات..."
+                  placeholderTextColor={palette.muted}
+                  value={expenseReason}
+                  onChangeText={setExpenseReason}
+                />
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>التاريخ (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={commonStyles.input}
+                  value={expenseDate}
+                  onChangeText={setExpenseDate}
+                />
+              </View>
+
+              {expenseError ? (
+                <View style={styles.alertError} accessibilityRole="alert">
+                  <Ionicons name="alert-circle" size={15} color="#EF4444" />
+                  <Text style={styles.alertErrorText}>{expenseError}</Text>
+                </View>
+              ) : null}
+
+              <PrimaryButton
+                label="إضافة انفاق"
+                onPress={handleAddExpense}
+              />
+
+              {/* Expenses list */}
+              <View style={styles.divider} />
+              {expenses.length === 0 ? (
+                <Text style={styles.emptyExpenseText}>لا توجد انفاقات مسجلة بعد.</Text>
+              ) : (
+                expenses.map((exp) => (
+                  <View key={exp.id} style={styles.expenseRow}>
+                    <View style={styles.expenseInfo}>
+                      <Text style={styles.expenseReason}>{exp.reason}</Text>
+                      <Text style={styles.expenseDate}>{formatDateDisplay(exp.date)}</Text>
+                    </View>
+                    <Text style={styles.expenseAmount}>- {formatAmount(exp.amount)} أوقية</Text>
+                  </View>
+                ))
+              )}
             </View>
           </ScrollView>
         </View>
@@ -1159,5 +1305,75 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.5,
+  },
+  expenseBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#DC2626',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  expenseBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  expenseTotalBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
+    gap: 4,
+  },
+  expenseTotalLabel: {
+    fontSize: 12,
+    color: '#991B1B',
+    fontWeight: '700',
+  },
+  expenseTotalValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  expenseRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  expenseInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  expenseReason: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: palette.text,
+    textAlign: 'right',
+  },
+  expenseDate: {
+    fontSize: 11,
+    color: palette.muted,
+  },
+  expenseAmount: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  emptyExpenseText: {
+    fontSize: 13,
+    color: palette.muted,
+    textAlign: 'center',
+    paddingVertical: 8,
   },
 });
