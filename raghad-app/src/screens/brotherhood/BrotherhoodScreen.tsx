@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -109,6 +110,8 @@ function getSessionEffectiveStatus(session: Session): 'scheduled' | 'done' | 'de
 
 export function BrotherhoodScreen() {
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
+  const contentMaxWidth = Math.min(640, width - 24);
 
   const [activeTab, setActiveTab] = useState<TabKey>('students');
   const [students, setStudents] = useState<Student[]>([]);
@@ -548,7 +551,7 @@ export function BrotherhoodScreen() {
 
   return (
     <View style={commonStyles.screen}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={[styles.container, { maxWidth: contentMaxWidth }]}>
         {/* Header Bar */}
         <View style={styles.headerRow}>
           <View style={styles.headerTitleBox}>

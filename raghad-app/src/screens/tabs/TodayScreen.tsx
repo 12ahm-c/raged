@@ -6,13 +6,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { api, type EndOfDayDisplayDTO } from '../../api/client';
 import {
   commonStyles,
@@ -205,6 +206,8 @@ function TaskItem({
 
 export function TodayScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { width } = useWindowDimensions();
+  const contentMaxWidth = Math.min(640, width - 24);
   const [daily, setDaily] = useState<DailyResponseDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -642,6 +645,9 @@ export function TodayScreen() {
           {savingOrder ? (
             <Text style={styles.emptyText}>جارٍ حفظ الترتيب...</Text>
           ) : null}
+          <Text style={[styles.emptyText, { marginBottom: 8 }]}>
+            اضغط مع الاستمرار على ≡ لسحب العنصر وإفلاته في المكان المناسب.
+          </Text>
           <DraggableFlatList
             data={orderedItems}
             keyExtractor={(item) => item.key}
@@ -650,32 +656,73 @@ export function TodayScreen() {
               void persistPlan(data);
             }}
             renderItem={({ item, drag, isActive }: RenderItemParams<PlanItem>) => (
-              <Pressable
-                onLongPress={drag}
-                disabled={isActive}
-                style={[
-                  styles.habitCard,
-                  isActive && { opacity: 0.8, transform: [{ scale: 1.02 }] },
-                ]}
-              >
-                <View style={styles.timeBadge}>
-                  <Text style={styles.timeBadgeText}>{item.meta}</Text>
+              <ScaleDecorator>
+                <View
+                  style={[
+                    styles.habitCard,
+                    isActive && { opacity: 0.9, elevation: 6, shadowOpacity: 0.15 },
+                  ]}
+                >
+                  <Pressable
+                    onLongPress={drag}
+                    delayLongPress={120}
+                    hitSlop={8}
+                    style={styles.dragHandle}
+                    accessibilityRole="button"
+                    accessibilityLabel="سحب لإعادة الترتيب"
+                  >
+                    <Ionicons name="reorder-three-outline" size={22} color={palette.primary} />
+                  </Pressable>
+                  <View style={styles.timeBadge}>
+                    <Text style={styles.timeBadgeText}>{item.meta}</Text>
+                  </View>
+                  <View style={styles.habitContent}>
+                    <Text style={[styles.habitName, item.done && styles.taskDoneText]} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.habitStatus}>
+                      {item.kind === 'habit' ? (item.done ? 'مكتملة ✓' : 'عادة') : (item.done ? 'مكتملة ✓' : 'مهمة')}
+                    </Text>
+                  </View>
+                  <View style={styles.moveButtonsColumn}>
+                    <Pressable
+                      onPress={() => {
+                        const idx = orderedItems.findIndex((x) => x.key === item.key);
+                        if (idx > 0) {
+                          const next = [...orderedItems];
+                          [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                          setOrderedItems(next);
+                          void persistPlan(next);
+                        }
+                      }}
+                      style={styles.moveBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="نقل لأعلى"
+                    >
+                      <Ionicons name="chevron-up" size={18} color={palette.primary} />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        const idx = orderedItems.findIndex((x) => x.key === item.key);
+                        if (idx >= 0 && idx < orderedItems.length - 1) {
+                          const next = [...orderedItems];
+                          [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                          setOrderedItems(next);
+                          void persistPlan(next);
+                        }
+                      }}
+                      style={styles.moveBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="نقل لأسفل"
+                    >
+                      <Ionicons name="chevron-down" size={18} color={palette.primary} />
+                    </Pressable>
+                  </View>
                 </View>
-                <View style={styles.habitContent}>
-                  <Text style={[styles.habitName, item.done && styles.taskDoneText]} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.habitStatus}>
-                    {item.kind === 'habit' ? (item.done ? 'مكتملة ✓' : 'عادة') : (item.done ? 'مكتملة ✓' : 'مهمة')}
-                  </Text>
-                </View>
-                <View style={styles.checkCircle}>
-                  <Ionicons name="reorder-three-outline" size={18} color={palette.primary} />
-                </View>
-              </Pressable>
+              </ScaleDecorator>
             )}
             containerStyle={{ flex: 1 }}
-            contentContainerStyle={styles.container}
+            contentContainerStyle={[styles.container, { maxWidth: contentMaxWidth }]}
           />
           <View style={{ padding: 16 }}>
             <Pressable
@@ -905,6 +952,28 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontSize: 13,
     fontWeight: '700',
+  },
+  moveButtonsColumn: {
+    flexDirection: 'column',
+    gap: 4,
+    marginLeft: 8,
+  },
+  moveBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dragHandle: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
   habitCard: {
     backgroundColor: '#FFFFFF',
