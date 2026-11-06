@@ -425,6 +425,17 @@ export const api = {
     return normalizeDaily(result);
   },
 
+  async getDailyPlan(date: string): Promise<{ kind: 'habit' | 'task'; id: string }[]> {
+    const result = await request<unknown>(`/daily/plan${queryString({ date })}`, 'GET');
+    if (Array.isArray(result)) return result as { kind: 'habit' | 'task'; id: string }[];
+    if (isRecord(result) && Array.isArray(result.items)) return result.items as { kind: 'habit' | 'task'; id: string }[];
+    return [];
+  },
+
+  async updateDailyPlan(date: string, items: { kind: 'habit' | 'task'; id: string }[]): Promise<void> {
+    await request(`/daily/plan`, 'PUT', { date, items });
+  },
+
   async getEndOfDay(date: string): Promise<EndOfDayDisplayDTO> {
     const result = await request<unknown>(
       `/daily/end-of-day${queryString({ date })}`,

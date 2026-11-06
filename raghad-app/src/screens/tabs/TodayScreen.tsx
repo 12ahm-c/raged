@@ -215,8 +215,17 @@ export function TodayScreen() {
   const [endOfDay, setEndOfDay] = useState<EndOfDayDisplayDTO | null>(null);
   const [endOfDayLoading, setEndOfDayLoading] = useState(false);
   const [endOfDayError, setEndOfDayError] = useState('');
+  interface PlanItem {
+    key: string;
+    kind: 'habit' | 'task';
+    id: string;
+    title: string;
+    meta: string;
+    done: boolean;
+  }
+
   const [reorderVisible, setReorderVisible] = useState(false);
-  const [orderedTasks, setOrderedTasks] = useState<TaskDTO[]>([]);
+  const [orderedItems, setOrderedItems] = useState<PlanItem[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
 
   const date = localDateIso();
@@ -310,26 +319,61 @@ export function TodayScreen() {
 
   async function openReorder() {
     if (!daily) return;
-    setOrderedTasks([...daily.tasks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+    const habitItems: PlanItem[] = [...baseHabits, ...hobbyHabits].map((habit) => ({
+      key: `habit:${habit._id}`,
+      kind: 'habit',
+      id: habit._id,
+      title: habit.name,
+      meta: habit.suggestedTime || (habit.isHobby ? 'هواية' : 'عادة'),
+      done: habit.logStatus === 'completed',
+    }));
+    const taskItems: PlanItem[] = daily.tasks.map((task) => ({
+      key: `task:${task._id}`,
+      kind: 'task',
+      id: task._id,
+      title: task.title,
+      meta: task.startTime || 'مهمة',
+      done: task.status === 'done',
+    }));
+    const allItems = [...habitItems, ...taskItems];
+
+    try {
+      const plan = await api.getDailyPlan(date);
+      if (plan.length > 0) {
+        const itemMap = new Map(allItems.map((item) => [item.key, item]));
+        const ordered: PlanItem[] = [];
+        for (const entry of plan) {
+          const key = `${entry.kind}:${entry.id}`;
+          const item = itemMap.get(key);
+          if (item) {
+            ordered.push(item);
+            itemMap.delete(key);
+          }
+        }
+        for (const item of itemMap.values()) ordered.push(item);
+        setOrderedItems(ordered);
+      } else {
+        setOrderedItems(allItems);
+      }
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError));
+      setOrderedItems(allItems);
+    }
     setReorderVisible(true);
   }
 
-  async function persistTaskOrder(tasks: TaskDTO[]) {
+  async function persistPlan(items: PlanItem[]) {
     setSavingOrder(true);
     setError('');
     setSuccess('');
     try {
-      await Promise.all(tasks.map((task, index) => api.updateTask(task._id, { order: index })));
-      setDaily((current) =>
-        current
-          ? {
-              ...current,
-              tasks: tasks.map((task, index) => ({ ...task, order: index })),
-            }
-          : current
+      await api.updateDailyPlan(
+        date,
+        items.map((item) => ({ kind: item.kind, id: item.id }))
       );
-      setOrderedTasks(tasks.map((task, index) => ({ ...task, order: index })));
-      setSuccess('تم حفظ ترتيب المهام.');
+      const taskItems = items.filter((item) => item.kind === 'task');
+      await Promise.all(taskItems.map((item, index) => api.updateTask(item.id, { order: index })));
+      setSuccess('تم حفظ الترتيب.');
     } catch (requestError) {
       setError(getApiErrorMessage(requestError));
     } finally {
@@ -599,13 +643,13 @@ export function TodayScreen() {
             <Text style={styles.emptyText}>جارٍ حفظ الترتيب...</Text>
           ) : null}
           <DraggableFlatList
-            data={orderedTasks}
-            keyExtractor={(item) => item._id}
+            data={orderedItems}
+            keyExtractor={(item) => item.key}
             onDragEnd={({ data }) => {
-              setOrderedTasks(data);
-              void persistTaskOrder(data);
+              setOrderedItems(data);
+              void persistPlan(data);
             }}
-            renderItem={({ item, drag, isActive }: RenderItemParams<TaskDTO>) => (
+            renderItem={({ item, drag, isActive }: RenderItemParams<PlanItem>) => (
               <Pressable
                 onLongPress={drag}
                 disabled={isActive}
@@ -615,14 +659,14 @@ export function TodayScreen() {
                 ]}
               >
                 <View style={styles.timeBadge}>
-                  <Text style={styles.timeBadgeText}>{item.startTime || 'مهمة'}</Text>
+                  <Text style={styles.timeBadgeText}>{item.meta}</Text>
                 </View>
                 <View style={styles.habitContent}>
-                  <Text style={[styles.habitName, item.status === 'done' && styles.taskDoneText]} numberOfLines={2}>
+                  <Text style={[styles.habitName, item.done && styles.taskDoneText]} numberOfLines={2}>
                     {item.title}
                   </Text>
                   <Text style={styles.habitStatus}>
-                    {item.status === 'done' ? 'مكتملة ✓' : item.status === 'deferred' ? 'مؤجلة' : 'قيد التنفيذ'}
+                    {item.kind === 'habit' ? (item.done ? 'مكتملة ✓' : 'عادة') : (item.done ? 'مكتملة ✓' : 'مهمة')}
                   </Text>
                 </View>
                 <View style={styles.checkCircle}>
