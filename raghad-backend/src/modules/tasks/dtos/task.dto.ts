@@ -13,6 +13,7 @@ export const taskBody = z.object({
   startTime: z.string().optional(),
   status: z.enum(['todo', 'done', 'deferred']).default('todo'),
   priority: z.enum(['low', 'medium', 'high']).default('medium'),
+  order: z.number().int().default(0),
   source: z.enum(['recurring', 'manual', 'project']).default('manual'),
   pointsReward: z.number().int().min(0).default(1),
 });

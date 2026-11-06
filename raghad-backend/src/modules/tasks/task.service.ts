@@ -29,7 +29,7 @@ export async function listTasks(userId: string, query: Record<string, unknown>):
   if (typeof query.type === 'string') filter.type = query.type;
   const { page, limit, skip } = pageOptions(query);
   const [items, total] = await Promise.all([
-    Task.find(filter).sort({ date: 1, startTime: 1 }).skip(skip).limit(limit),
+    Task.find(filter).sort({ date: 1, order: 1, startTime: 1 }).skip(skip).limit(limit),
     Task.countDocuments(filter),
   ]);
   return { items, meta: { page, limit, total } };

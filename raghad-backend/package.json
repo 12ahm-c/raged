@@ -15,6 +15,7 @@
     "seed": "tsx src/scripts/seed.ts",
     "user:create": "tsx src/scripts/create-user.ts",
     "user:clone": "tsx src/scripts/clone-user-data.ts",
+    "nuit:tasks": "tsx src/scripts/add-nuit-competition-tasks.ts",
     "vapid:keys": "tsx src/scripts/generate-vapid-keys.ts"
   },
   "dependencies": {

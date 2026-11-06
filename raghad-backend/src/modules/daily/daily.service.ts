@@ -77,7 +77,7 @@ export async function getDaily(userId: string, date: Date): Promise<unknown> {
   const [habits, logs, tasks, points] = await Promise.all([
     dueHabitsForDate(userId, day),
     HabitLog.find({ userId, date: day }),
-    Task.find({ userId, date: { $gte: day, $lte: endOfDay(day) } }).sort({ startTime: 1, priority: 1 }),
+    Task.find({ userId, date: { $gte: day, $lte: endOfDay(day) } }).sort({ order: 1, startTime: 1, priority: 1 }),
     getPoints(userId, day, endOfDay(day)),
   ]);
 

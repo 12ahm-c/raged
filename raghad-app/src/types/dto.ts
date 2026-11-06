@@ -193,6 +193,7 @@ export interface TaskDTO {
   startTime: string | null;
   status: 'todo' | 'done' | 'deferred';
   priority: 'low' | 'medium' | 'high';
+  order: number;
   source: 'recurring' | 'manual' | 'project';
   pointsReward: number;
 }
@@ -206,6 +207,7 @@ export interface TaskCreateRequestDTO {
   date: string;
   startTime?: string | null;
   priority: TaskDTO['priority'];
+  order?: number;
   pointsReward?: number;
 }
 

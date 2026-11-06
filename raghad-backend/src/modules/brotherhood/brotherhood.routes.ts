@@ -14,8 +14,8 @@ interface IStudent extends Document {
   name: string;
   group: 'senior' | 'junior';
   materials: string[];
-  lessons: Types.DocumentArray<{ title: string; status: 'done' | 'pending' }>;
-  exercises: Types.DocumentArray<{ title: string; done: boolean }>;
+  lessons: Types.DocumentArray<{ title: string; subject?: string; status: 'done' | 'pending'; memorized: boolean; understood: boolean }>;
+  exercises: Types.DocumentArray<{ title: string; description?: string; done: boolean; lessonId?: string; photoUrl?: string }>;
   photos: string[];
 }
 
@@ -34,8 +34,8 @@ const studentSchema = new Schema<IStudent>(
     name: { type: String, required: true },
     group: { type: String, enum: ['senior', 'junior'], required: true },
     materials: { type: [String], default: [] },
-    lessons: { type: [{ title: String, status: { type: String, enum: ['done', 'pending'], default: 'pending' } }], default: [] },
-    exercises: { type: [{ title: String, done: { type: Boolean, default: false } }], default: [] },
+    lessons: { type: [{ title: String, subject: String, status: { type: String, enum: ['done', 'pending'], default: 'pending' }, memorized: { type: Boolean, default: false }, understood: { type: Boolean, default: false } }], default: [] },
+    exercises: { type: [{ title: String, description: String, done: { type: Boolean, default: false }, lessonId: String, photoUrl: String }], default: [] },
     photos: { type: [String], default: [] },
   },
   { timestamps: true }
@@ -88,9 +88,9 @@ router.get('/students/:id', validate(z.object({ params: z.object({ id: objectId 
 }));
 
 router.put('/students/:id', validate(z.object({ params: z.object({ id: objectId }), body: studentBody.partial().extend({
-  lessons: z.array(z.object({ title: z.string(), status: z.enum(['done', 'pending']).default('pending') })).optional(),
-  exercises: z.array(z.object({ title: z.string(), done: z.boolean().default(false) })).optional(),
-  photos: z.array(z.string().url()).optional(),
+  lessons: z.array(z.object({ title: z.string(), subject: z.string().optional(), status: z.enum(['done', 'pending']).default('pending'), memorized: z.boolean().default(false), understood: z.boolean().default(false) })).optional(),
+  exercises: z.array(z.object({ title: z.string().optional(), description: z.string().optional(), done: z.boolean().default(false), lessonId: z.string().optional(), photoUrl: z.string().optional() })).optional(),
+  photos: z.array(z.string().min(1)).optional(),
 }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const student = await BrotherhoodStudent.findOneAndUpdate({ _id: req.params.id, userId: requireUserId(req) }, req.body, { new: true, runValidators: true });
   if (!student) throw new AppError('NOT_FOUND', 404, 'Student not found');
@@ -104,32 +104,34 @@ router.delete('/students/:id', validate(z.object({ params: z.object({ id: object
   res.status(204).send();
 }));
 
-router.post('/students/:id/lessons', validate(z.object({ params: z.object({ id: objectId }), body: z.object({ title: z.string().min(1) }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/students/:id/lessons', validate(z.object({ params: z.object({ id: objectId }), body: z.object({ title: z.string().min(1), subject: z.string().optional() }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const student = await BrotherhoodStudent.findOne({ _id: req.params.id, userId: requireUserId(req) });
   if (!student) throw new AppError('NOT_FOUND', 404, 'Student not found');
-  student.lessons.push({ title: req.body.title, status: 'pending' });
+  student.lessons.push({ title: req.body.title, subject: req.body.subject, status: 'pending', memorized: false, understood: false });
   await student.save();
   res.status(201).json(successResponse(student.lessons[student.lessons.length - 1]));
 }));
 
-router.patch('/students/:id/lessons/:lessonId', validate(z.object({ params: z.object({ id: objectId, lessonId: objectId }), body: z.object({ status: z.enum(['done', 'pending']) }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.patch('/students/:id/lessons/:lessonId', validate(z.object({ params: z.object({ id: objectId, lessonId: objectId }), body: z.object({ status: z.enum(['done', 'pending']).optional(), memorized: z.boolean().optional(), understood: z.boolean().optional() }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const student = await BrotherhoodStudent.findOne({ _id: req.params.id, userId: requireUserId(req) });
   const lesson = student?.lessons.id(req.params.lessonId);
   if (!student || !lesson) throw new AppError('NOT_FOUND', 404, 'Lesson not found');
-  lesson.status = req.body.status;
+  if (req.body.status !== undefined) lesson.status = req.body.status;
+  if (req.body.memorized !== undefined) lesson.memorized = req.body.memorized;
+  if (req.body.understood !== undefined) lesson.understood = req.body.understood;
   await student.save();
   res.json(successResponse(lesson));
 }));
 
-router.post('/students/:id/exercises', validate(z.object({ params: z.object({ id: objectId }), body: z.object({ title: z.string().min(1) }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/students/:id/exercises', validate(z.object({ params: z.object({ id: objectId }), body: z.object({ title: z.string().optional(), description: z.string().optional(), lessonId: z.string().optional(), photoUrl: z.string().optional(), done: z.boolean().default(false) }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const student = await BrotherhoodStudent.findOne({ _id: req.params.id, userId: requireUserId(req) });
   if (!student) throw new AppError('NOT_FOUND', 404, 'Student not found');
-  student.exercises.push({ title: req.body.title, done: false });
+  student.exercises.push({ title: req.body.title ?? req.body.description ?? 'تمرين', description: req.body.description, done: req.body.done ?? false, lessonId: req.body.lessonId, photoUrl: req.body.photoUrl });
   await student.save();
   res.status(201).json(successResponse(student.exercises[student.exercises.length - 1]));
 }));
 
-router.post('/students/:id/photos', validate(z.object({ params: z.object({ id: objectId }), body: z.object({ url: z.string().url() }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/students/:id/photos', validate(z.object({ params: z.object({ id: objectId }), body: z.object({ url: z.string().min(1) }) })), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const student = await BrotherhoodStudent.findOne({ _id: req.params.id, userId: requireUserId(req) });
   if (!student) throw new AppError('NOT_FOUND', 404, 'Student not found');
   student.photos.push(req.body.url);

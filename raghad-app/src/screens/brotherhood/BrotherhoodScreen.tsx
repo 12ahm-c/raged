@@ -11,6 +11,8 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'react-native';
 import { api } from '../../api/client';
 import {
   commonStyles,
@@ -25,7 +27,10 @@ import { goBackSafe } from '../../utils/goBackSafe';
 export interface StudentLesson {
   _id: string;
   title: string;
+  subject?: string;
   status: 'pending' | 'done';
+  memorized?: boolean;
+  understood?: boolean;
 }
 
 export interface StudentExercise {
@@ -33,12 +38,15 @@ export interface StudentExercise {
   title?: string;
   description?: string;
   done?: boolean;
+  lessonId?: string;
+  photoUrl?: string;
 }
 
 export interface Student {
   _id: string;
   name: string;
   group?: string;
+  materials?: string[];
   lessons?: StudentLesson[];
   exercises?: StudentExercise[];
   photos?: string[];
@@ -128,8 +136,16 @@ export function BrotherhoodScreen() {
 
   // Lesson state
   const [newLessonTitle, setNewLessonTitle] = useState('');
+  const [newLessonSubject, setNewLessonSubject] = useState('');
   const [addingLesson, setAddingLesson] = useState(false);
   const [lessonError, setLessonError] = useState('');
+
+  // Subject state
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [addingSubject, setAddingSubject] = useState(false);
+
+  // Exercise photo state
+  const [capturingForLessonId, setCapturingForLessonId] = useState<string | null>(null);
 
   // Exercise state
   const [newExerciseDescription, setNewExerciseDescription] = useState('');
@@ -309,6 +325,7 @@ export function BrotherhoodScreen() {
     try {
       const created = (await api.createBrotherhoodLesson(selectedStudent._id, {
         title: newLessonTitle.trim(),
+        subject: newLessonSubject.trim() || undefined,
       })) as StudentLesson | undefined;
 
       const newLesson: StudentLesson = created?._id
@@ -325,12 +342,81 @@ export function BrotherhoodScreen() {
         lessons: updatedLessons,
       });
       setNewLessonTitle('');
+      setNewLessonSubject('');
       showToast('تمت إضافة الدرس بنجاح.');
       await loadData();
     } catch (requestError) {
       setLessonError(getApiErrorMessage(requestError));
     } finally {
       setAddingLesson(false);
+    }
+  };
+
+  const handleAddSubject = async () => {
+    if (!selectedStudent) return;
+    if (!newSubjectName.trim()) return;
+    setAddingSubject(true);
+    try {
+      const materials = Array.from(new Set([...(selectedStudent.materials ?? []), newSubjectName.trim()]));
+      await api.updateBrotherhoodStudent(selectedStudent._id, { materials });
+      setSelectedStudent({ ...selectedStudent, materials });
+      setNewSubjectName('');
+      showToast('تمت إضافة المادة.');
+      await loadData();
+    } catch (requestError) {
+      showToast(getApiErrorMessage(requestError));
+    } finally {
+      setAddingSubject(false);
+    }
+  };
+
+  const handleToggleLessonFlag = async (lesson: StudentLesson, flag: 'memorized' | 'understood') => {
+    if (!selectedStudent) return;
+    try {
+      await api.updateBrotherhoodLesson(selectedStudent._id, lesson._id, { [flag]: !lesson[flag] });
+      const updatedLessons = (selectedStudent.lessons ?? []).map((l) =>
+        l._id === lesson._id ? { ...l, [flag]: !l[flag] } : l
+      );
+      setSelectedStudent({ ...selectedStudent, lessons: updatedLessons });
+    } catch (requestError) {
+      showToast(getApiErrorMessage(requestError));
+    }
+  };
+
+  const handleCaptureExercise = async (lessonId: string) => {
+    if (!selectedStudent) return;
+    setCapturingForLessonId(lessonId);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        showToast('تم رفض صلاحية الكاميرا.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.6,
+        base64: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const photoUrl = asset.base64
+        ? `data:image/jpeg;base64,${asset.base64}`
+        : asset.uri;
+      const created = (await api.createBrotherhoodExercise(selectedStudent._id, {
+        description: 'تمرين محلول',
+        lessonId,
+        photoUrl,
+      })) as StudentExercise | undefined;
+      const newExercise: StudentExercise = created?._id
+        ? created
+        : { _id: Date.now().toString(), description: 'تمرين محلول', lessonId, photoUrl };
+      const updatedExercises = [...(selectedStudent.exercises ?? []), newExercise];
+      setSelectedStudent({ ...selectedStudent, exercises: updatedExercises });
+      showToast('تمت إضافة التمرين with صورة.');
+    } catch (requestError) {
+      showToast(getApiErrorMessage(requestError));
+    } finally {
+      setCapturingForLessonId(null);
     }
   };
 
@@ -1072,7 +1158,35 @@ export function BrotherhoodScreen() {
                   </View>
                 )}
 
-                {/* Lessons Section */}
+                {/* Subjects Section */}
+                <View style={styles.sectionBlock}>
+                  <Text style={styles.sectionSubtitle}>المواد ({selectedStudent.materials?.length ?? 0})</Text>
+                  <View style={styles.addMiniRow}>
+                    <TextInput
+                      style={[commonStyles.input, styles.miniInput]}
+                      placeholder="اسم مادة جديدة..."
+                      value={newSubjectName}
+                      onChangeText={setNewSubjectName}
+                      placeholderTextColor={palette.muted}
+                    />
+                    <Pressable
+                      disabled={addingSubject}
+                      onPress={() => void handleAddSubject()}
+                      style={[styles.miniAddBtn, addingSubject && styles.btnDisabled]}
+                    >
+                      <Ionicons name="add" size={18} color="#FFFFFF" />
+                    </Pressable>
+                  </View>
+                  <View style={styles.chipsRow}>
+                    {(selectedStudent.materials ?? []).map((mat, idx) => (
+                      <View key={`mat-${idx}`} style={styles.chip}>
+                        <Text style={styles.chipText}>{mat}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Lessons Section (by subject) */}
                 <View style={styles.sectionBlock}>
                   <Text style={styles.sectionSubtitle}>
                     الدروس ({selectedStudent.lessons?.length ?? 0})
@@ -1083,6 +1197,15 @@ export function BrotherhoodScreen() {
                       placeholder="عنوان درس جديد..."
                       value={newLessonTitle}
                       onChangeText={setNewLessonTitle}
+                      placeholderTextColor={palette.muted}
+                    />
+                  </View>
+                  <View style={styles.addMiniRow}>
+                    <TextInput
+                      style={[commonStyles.input, styles.miniInput]}
+                      placeholder="المادة (اختياري)..."
+                      value={newLessonSubject}
+                      onChangeText={setNewLessonSubject}
                       placeholderTextColor={palette.muted}
                     />
                     <Pressable
@@ -1097,12 +1220,58 @@ export function BrotherhoodScreen() {
                     <Text style={commonStyles.error}>{lessonError}</Text>
                   ) : null}
                   {(selectedStudent.lessons ?? []).map((lesson, idx) => (
-                    <View key={lesson._id || `les-${idx}`} style={styles.itemRow}>
-                      <Text style={styles.itemTitle}>{lesson.title}</Text>
-                      <View style={styles.miniBadge}>
-                        <Text style={styles.miniBadgeText}>
-                          {lesson.status === 'done' ? 'مكتمل ✓' : 'قيد الانتظار'}
-                        </Text>
+                    <View key={lesson._id || `les-${idx}`} style={styles.lessonCard}>
+                      <View style={styles.lessonHeaderRow}>
+                        <Text style={styles.itemTitle}>{lesson.title}</Text>
+                        {lesson.subject ? (
+                          <View style={styles.miniBadge}>
+                            <Text style={styles.miniBadgeText}>{lesson.subject}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.lessonActionsRow}>
+                        <Pressable
+                          onPress={() => void handleToggleLessonFlag(lesson, 'memorized')}
+                          style={[styles.toggleBtn, lesson.memorized && styles.toggleBtnActive]}
+                        >
+                          <Ionicons name={lesson.memorized ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={lesson.memorized ? '#059669' : palette.muted} />
+                          <Text style={[styles.toggleBtnText, lesson.memorized && styles.toggleBtnTextActive]}>
+                            تم حفظه
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => void handleToggleLessonFlag(lesson, 'understood')}
+                          style={[styles.toggleBtn, lesson.understood && styles.toggleBtnActiveBlue]}
+                        >
+                          <Ionicons name={lesson.understood ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={lesson.understood ? '#2563EB' : palette.muted} />
+                          <Text style={[styles.toggleBtnText, lesson.understood && styles.toggleBtnTextActiveBlue]}>
+                            تم فهمه
+                          </Text>
+                        </Pressable>
+                      </View>
+                      {/* Exercises for this lesson */}
+                      <View style={styles.lessonExercisesBlock}>
+                        <Text style={styles.lessonExercisesTitle}>تمارين محلولة</Text>
+                        {(selectedStudent.exercises ?? [])
+                          .filter((ex) => ex.lessonId === lesson._id)
+                          .map((ex, eidx) => (
+                            <View key={ex._id || `ex-${eidx}`} style={styles.exerciseRow}>
+                              <Text style={styles.exerciseDesc}>{ex.description || ex.title}</Text>
+                              {ex.photoUrl ? (
+                                <Image source={{ uri: ex.photoUrl }} style={styles.exerciseThumb} />
+                              ) : null}
+                            </View>
+                          ))}
+                        <Pressable
+                          disabled={capturingForLessonId === lesson._id}
+                          onPress={() => void handleCaptureExercise(lesson._id)}
+                          style={styles.captureBtn}
+                        >
+                          <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
+                          <Text style={styles.captureBtnText}>
+                            {capturingForLessonId === lesson._id ? 'جارٍ...' : 'تصوير تمرين'}
+                          </Text>
+                        </Pressable>
                       </View>
                     </View>
                   ))}
@@ -1862,5 +2031,120 @@ const styles = StyleSheet.create({
     color: palette.text,
     fontWeight: '600',
     fontSize: 14,
+  },
+  chipsRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  chip: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  chipText: {
+    color: '#4F46E5',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  lessonCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+    marginBottom: 10,
+  },
+  lessonHeaderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  lessonActionsRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+  },
+  toggleBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  toggleBtnActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  toggleBtnActiveBlue: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  toggleBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: palette.muted,
+  },
+  toggleBtnTextActive: {
+    color: '#059669',
+  },
+  toggleBtnTextActiveBlue: {
+    color: '#2563EB',
+  },
+  lessonExercisesBlock: {
+    marginTop: 6,
+    gap: 6,
+  },
+  lessonExercisesTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: palette.muted,
+    textAlign: 'right',
+  },
+  exerciseRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 8,
+    gap: 8,
+  },
+  exerciseDesc: {
+    flex: 1,
+    fontSize: 12,
+    color: palette.text,
+    textAlign: 'right',
+  },
+  exerciseThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  captureBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#4F46E5',
+    borderRadius: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  captureBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

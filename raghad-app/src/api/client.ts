@@ -1005,6 +1005,10 @@ export const api = {
     return request(`/brotherhood/students/${encodeURIComponent(studentId)}/lessons`, 'POST', input);
   },
 
+  updateBrotherhoodLesson(studentId: string, lessonId: string, input: Record<string, unknown>): Promise<unknown> {
+    return request(`/brotherhood/students/${encodeURIComponent(studentId)}/lessons/${encodeURIComponent(lessonId)}`, 'PATCH', input);
+  },
+
   createBrotherhoodExercise(studentId: string, input: Record<string, unknown>): Promise<unknown> {
     return request(`/brotherhood/students/${encodeURIComponent(studentId)}/exercises`, 'POST', input);
   },

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,6 +12,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { api, type EndOfDayDisplayDTO } from '../../api/client';
 import {
   commonStyles,
@@ -213,6 +215,9 @@ export function TodayScreen() {
   const [endOfDay, setEndOfDay] = useState<EndOfDayDisplayDTO | null>(null);
   const [endOfDayLoading, setEndOfDayLoading] = useState(false);
   const [endOfDayError, setEndOfDayError] = useState('');
+  const [reorderVisible, setReorderVisible] = useState(false);
+  const [orderedTasks, setOrderedTasks] = useState<TaskDTO[]>([]);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   const date = localDateIso();
   const endOfDayAvailable = canRequestEndOfDay();
@@ -303,6 +308,35 @@ export function TodayScreen() {
     }
   }
 
+  async function openReorder() {
+    if (!daily) return;
+    setOrderedTasks([...daily.tasks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+    setReorderVisible(true);
+  }
+
+  async function persistTaskOrder(tasks: TaskDTO[]) {
+    setSavingOrder(true);
+    setError('');
+    setSuccess('');
+    try {
+      await Promise.all(tasks.map((task, index) => api.updateTask(task._id, { order: index })));
+      setDaily((current) =>
+        current
+          ? {
+              ...current,
+              tasks: tasks.map((task, index) => ({ ...task, order: index })),
+            }
+          : current
+      );
+      setOrderedTasks(tasks.map((task, index) => ({ ...task, order: index })));
+      setSuccess('تم حفظ ترتيب المهام.');
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError));
+    } finally {
+      setSavingOrder(false);
+    }
+  }
+
   async function loadEndOfDay() {
     setEndOfDayLoading(true);
     setEndOfDayError('');
@@ -344,6 +378,7 @@ export function TodayScreen() {
   if (!daily) return <ScreenState title="لا توجد بيانات لليوم" message={error} />;
 
   return (
+    <>
     <ScrollView
       style={commonStyles.screen}
       contentContainerStyle={styles.container}
@@ -487,13 +522,22 @@ export function TodayScreen() {
 
       {/* Tasks Section */}
       <View style={[styles.sectionHeader, { marginTop: 22 }]}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.navigate('Tasks')}
-          style={styles.badgeLink}
-        >
-          <Text style={styles.badgeLinkText}>إدارة المهام ←</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void openReorder()}
+            style={styles.badgeLink}
+          >
+            <Text style={styles.badgeLinkText}>ترتيب المهام</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('Tasks')}
+            style={styles.badgeLink}
+          >
+            <Text style={styles.badgeLinkText}>إدارة المهام ←</Text>
+          </Pressable>
+        </View>
         <Text style={styles.sectionTitle}>المهام اليومية</Text>
       </View>
 
@@ -541,6 +585,65 @@ export function TodayScreen() {
         />
       </View>
     </ScrollView>
+
+      {/* Reorder Tasks Modal */}
+      <Modal visible={reorderVisible} animationType="slide" onRequestClose={() => setReorderVisible(false)}>
+        <View style={commonStyles.screen}>
+          <View style={styles.modalHeaderRow}>
+            <Pressable onPress={() => setReorderVisible(false)} style={styles.closeBtn}>
+              <Ionicons name="close" size={20} color={palette.text} />
+            </Pressable>
+            <Text style={styles.modalMainTitle}>ترتيب مهام اليوم</Text>
+          </View>
+          {savingOrder ? (
+            <Text style={styles.emptyText}>جارٍ حفظ الترتيب...</Text>
+          ) : null}
+          <DraggableFlatList
+            data={orderedTasks}
+            keyExtractor={(item) => item._id}
+            onDragEnd={({ data }) => {
+              setOrderedTasks(data);
+              void persistTaskOrder(data);
+            }}
+            renderItem={({ item, drag, isActive }: RenderItemParams<TaskDTO>) => (
+              <Pressable
+                onLongPress={drag}
+                disabled={isActive}
+                style={[
+                  styles.habitCard,
+                  isActive && { opacity: 0.8, transform: [{ scale: 1.02 }] },
+                ]}
+              >
+                <View style={styles.timeBadge}>
+                  <Text style={styles.timeBadgeText}>{item.startTime || 'مهمة'}</Text>
+                </View>
+                <View style={styles.habitContent}>
+                  <Text style={[styles.habitName, item.status === 'done' && styles.taskDoneText]} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.habitStatus}>
+                    {item.status === 'done' ? 'مكتملة ✓' : item.status === 'deferred' ? 'مؤجلة' : 'قيد التنفيذ'}
+                  </Text>
+                </View>
+                <View style={styles.checkCircle}>
+                  <Ionicons name="reorder-three-outline" size={18} color={palette.primary} />
+                </View>
+              </Pressable>
+            )}
+            containerStyle={{ flex: 1 }}
+            contentContainerStyle={styles.container}
+          />
+          <View style={{ padding: 16 }}>
+            <Pressable
+              onPress={() => setReorderVisible(false)}
+              style={styles.emptyButton}
+            >
+              <Text style={styles.emptyButtonText}>إغلاق</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -910,6 +1013,27 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontSize: 14,
     fontWeight: '700',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  modalMainTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: palette.text,
+    textAlign: 'right',
+  },
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   evaluationCard: {
     backgroundColor: '#FFFFFF',

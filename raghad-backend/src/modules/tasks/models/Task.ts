@@ -16,6 +16,7 @@ export interface ITask extends Document {
   startTime?: string;
   status: TaskStatus;
   priority: TaskPriority;
+  order: number;
   source: TaskSource;
   pointsReward: number;
   createdAt: Date;
@@ -34,6 +35,7 @@ const taskSchema = new Schema<ITask>(
     startTime: { type: String },
     status: { type: String, enum: ['todo', 'done', 'deferred'], default: 'todo' },
     priority: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
+    order: { type: Number, default: 0 },
     source: { type: String, enum: ['recurring', 'manual', 'project'], default: 'manual' },
     pointsReward: { type: Number, default: 1 },
   },
