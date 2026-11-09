@@ -83,5 +83,18 @@ export async function startServer(): Promise<void> {
     console.log(`[Server] Running on http://localhost:${config.port}/v1`);
     // مُجدول الإشعارات: تذكيرات قرب الوقت + إغلاق اليوم 23:00 + بداية اليوم.
     startScheduler();
+
+    // إبقاء خدمة Render مستيقظة (cron-like keep-alive) لتجنب cold start.
+    const renderUrl = process.env.RENDER_EXTERNAL_URL;
+    if (renderUrl) {
+      const ping = () => {
+        fetch(`${renderUrl}/health`)
+          .then(() => console.log('[KeepAlive] ping ok'))
+          .catch((error) => console.warn('[KeepAlive] ping failed:', error));
+      };
+      setTimeout(ping, 10 * 1000);
+      setInterval(ping, 5 * 60 * 1000);
+      console.log('[KeepAlive] enabled for', renderUrl);
+    }
   });
 }

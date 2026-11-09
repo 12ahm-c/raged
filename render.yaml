@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: raghad-backend
+    rootDir: raghad-backend
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  - type: cron
+    name: raghad-keep-alive
+    runtime: node
+    schedule: '*/5 * * * *'
+    buildCommand: echo "no build"
+    startCommand: 'sh -c "curl -fsS ${RENDER_WEB_URL}/health"'
